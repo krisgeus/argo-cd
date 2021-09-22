@@ -3,7 +3,7 @@ package v1alpha1
 import (
 	"encoding/json"
 	"fmt"
-	math "math"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/argoproj/argo-cd/v2/util/collections"
 	"github.com/argoproj/argo-cd/v2/util/helm"
 )
 
@@ -1271,6 +1272,14 @@ type Cluster struct {
 	Info ClusterInfo `json:"info,omitempty" protobuf:"bytes,8,opt,name=info"`
 	// Shard contains optional shard number. Calculated on the fly by the application controller if not specified.
 	Shard *int64 `json:"shard,omitempty" protobuf:"bytes,9,opt,name=shard"`
+	// Indicates if cluster level resources should be managed. This setting is used only if cluster is connected in a namespaced mode.
+	ClusterResources bool `json:"clusterResources,omitempty" protobuf:"bytes,10,opt,name=clusterResources"`
+	// Reference between project and cluster that allow you automatically to be added as item inside Destinations project entity
+	Project string `json:"project,omitempty" protobuf:"bytes,11,opt,name=project"`
+	// Labels for cluster secret metadata
+	Labels map[string]string `json:"labels,omitempty" protobuf:"bytes,12,opt,name=labels"`
+	// Annotations for cluster secret metadata
+	Annotations map[string]string `json:"annotations,omitempty" protobuf:"bytes,13,opt,name=annotations"`
 }
 
 // Equals returns true if two cluster objects are considered to be equal
@@ -1295,6 +1304,19 @@ func (c *Cluster) Equals(other *Cluster) bool {
 	if shard != otherShard {
 		return false
 	}
+
+	if c.ClusterResources != other.ClusterResources {
+		return false
+	}
+
+	if !collections.StringMapsEqual(c.Annotations, other.Annotations) {
+		return false
+	}
+
+	if !collections.StringMapsEqual(c.Labels, other.Labels) {
+		return false
+	}
+
 	return reflect.DeepEqual(c.Config, other.Config)
 }
 
@@ -1601,7 +1623,7 @@ type OrphanedResourceKey struct {
 
 // IsWarn returns true if warnings are enabled for orphan resources monitoring
 func (s *OrphanedResourcesMonitorSettings) IsWarn() bool {
-	return s.Warn == nil || *s.Warn
+	return s.Warn != nil && *s.Warn
 }
 
 // SignatureKey is the specification of a key required to verify commit signatures with
@@ -1963,7 +1985,7 @@ type ProjectRole struct {
 	Name string `json:"name" protobuf:"bytes,1,opt,name=name"`
 	// Description is a description of the role
 	Description string `json:"description,omitempty" protobuf:"bytes,2,opt,name=description"`
-	// Policies Stores a list of casbin formated strings that define access policies for the role in the project
+	// Policies Stores a list of casbin formatted strings that define access policies for the role in the project
 	Policies []string `json:"policies,omitempty" protobuf:"bytes,3,rep,name=policies"`
 	// JWTTokens are a list of generated JWT tokens bound to this role
 	JWTTokens []JWTToken `json:"jwtTokens,omitempty" protobuf:"bytes,4,rep,name=jwtTokens"`
@@ -2396,13 +2418,19 @@ func (r ResourceDiff) TargetObject() (*unstructured.Unstructured, error) {
 	return UnmarshalToUnstructured(r.TargetState)
 }
 
-// TODO: document this method
+// SetInferredServer sets the Server field of the destination. See IsServerInferred() for details.
 func (d *ApplicationDestination) SetInferredServer(server string) {
+
 	d.isServerInferred = true
 	d.Server = server
 }
 
-// TODO: document this method
+// An ApplicationDestination has an 'inferred server' if the ApplicationDestination
+// contains a Name, but not a Server URL. In this case it is necessary to retrieve
+// the Server URL by looking up the cluster name.
+//
+// As of this writing, looking up the cluster name, and setting the URL, is
+// performed by 'utils.ValidateDestination(...)', which then calls SetInferredServer.
 func (d *ApplicationDestination) IsServerInferred() bool {
 	return d.isServerInferred
 }

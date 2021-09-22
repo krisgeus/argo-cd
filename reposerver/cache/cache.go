@@ -46,8 +46,8 @@ func AddCacheFlagsToCmd(cmd *cobra.Command, opts ...func(client *redis.Client)) 
 	var repoCacheExpiration time.Duration
 	var revisionCacheExpiration time.Duration
 
-	cmd.Flags().DurationVar(&repoCacheExpiration, "repo-cache-expiration", env.ParseDurationFromEnv("ARGOCD_REPO_CACHE_EXPIRATION", 24*time.Hour, 0, math.MaxInt32), "Cache expiration for repo state, incl. app lists, app details, manifest generation, revision meta-data")
-	cmd.Flags().DurationVar(&revisionCacheExpiration, "revision-cache-expiration", env.ParseDurationFromEnv("ARGOCD_RECONCILIATION_TIMEOUT", 3*time.Minute, 0, math.MaxInt32), "Cache expiration for cached revision")
+	cmd.Flags().DurationVar(&repoCacheExpiration, "repo-cache-expiration", env.ParseDurationFromEnv("ARGOCD_REPO_CACHE_EXPIRATION", 24*time.Hour, 0, math.MaxInt64), "Cache expiration for repo state, incl. app lists, app details, manifest generation, revision meta-data")
+	cmd.Flags().DurationVar(&revisionCacheExpiration, "revision-cache-expiration", env.ParseDurationFromEnv("ARGOCD_RECONCILIATION_TIMEOUT", 3*time.Minute, 0, math.MaxInt64), "Cache expiration for cached revision")
 
 	repoFactory := cacheutil.AddCacheFlagsToCmd(cmd, opts...)
 
@@ -63,8 +63,8 @@ func AddCacheFlagsToCmd(cmd *cobra.Command, opts ...func(client *redis.Client)) 
 func appSourceKey(appSrc *appv1.ApplicationSource) uint32 {
 	appSrc = appSrc.DeepCopy()
 	if !appSrc.IsHelm() {
-		appSrc.RepoURL = ""        // superceded by commitSHA
-		appSrc.TargetRevision = "" // superceded by commitSHA
+		appSrc.RepoURL = ""        // superseded by commitSHA
+		appSrc.TargetRevision = "" // superseded by commitSHA
 	}
 	appSrcStr, _ := json.Marshal(appSrc)
 	return hash.FNVa(string(appSrcStr))
@@ -152,9 +152,9 @@ func (c *Cache) GetManifests(revision string, appSrc *appv1.ApplicationSource, c
 		return fmt.Errorf("Unable to generate hash value: %s", err)
 	}
 
-	// If the expected hash of the cache entry does not match the actual hash value...
-	if hash != res.CacheEntryHash {
-		log.Warnf("Manifest hash did not match expected value, treating as a cache miss: %s", appName)
+	// If cached result does not have manifests or the expected hash of the cache entry does not match the actual hash value...
+	if hash != res.CacheEntryHash || res.ManifestResponse == nil && res.MostRecentError == "" {
+		log.Warnf("Manifest hash did not match expected value or cached manifests response is empty, treating as a cache miss: %s", appName)
 
 		err = c.DeleteManifests(revision, appSrc, clusterInfo, namespace, appLabelKey, appName)
 		if err != nil {
