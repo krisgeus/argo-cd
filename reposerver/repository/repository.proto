@@ -83,6 +83,7 @@ message RepoServerAppDetailsQuery {
     string appName = 5;
     bool noCache = 6;
     repeated github.com.argoproj.argo_cd.v2.pkg.apis.application.v1alpha1.RepoCreds helmExternalValueRepoCreds = 7;
+    bool noRevisionCache = 8;
 }
 
 // RepoAppDetailsResponse application details
